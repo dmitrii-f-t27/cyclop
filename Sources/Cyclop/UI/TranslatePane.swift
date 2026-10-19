@@ -5,6 +5,10 @@ import Translation
 /// result on the right. The left one sits on a surface — that is the whole
 /// signal that it can be typed into, since a caret only shows up once there
 /// is something in it.
+///
+/// The non-Russian language is picked from the header of whichever column it
+/// stands on. The pair itself is not picked: script decides the direction, so
+/// one choice gives both "German → Russian" and "Russian → German".
 struct TranslatePane: View {
     @ObservedObject var translator: Translator
     /// Whether the panel holds the keyboard. Drops to false when the user
@@ -14,16 +18,48 @@ struct TranslatePane: View {
 
     @FocusState private var focused: Bool
     @State private var configuration: TranslationSession.Configuration?
-    /// Measured once, off the layout path. See `body`.
+    /// Measured once, off the layout path. See `columns`.
     @State private var paneSize: CGSize = .zero
+    /// The language list stands in the pane's place while it is open, the way
+    /// the currency picker does — the panel has no room for a popover and no
+    /// key window for a menu to hang from.
+    @State private var choosing = false
 
     /// Largest first. Four rungs, far enough apart that a change is always a
     /// deliberate-looking drop rather than a wobble.
     private let ladder: [CGFloat] = [27, 20, 15, 11]
 
     var body: some View {
+        Group {
+            if choosing {
+                languagePicker
+            } else {
+                columns
+            }
+        }
+        .padding(.top, 2)
+        // One task for both the text and the retry counter: a keystroke
+        // cancels the pending sleep, so only a pause actually translates. The
+        // chosen language is part of the request, so switching it starts a new
+        // run even while the text stays as it was.
+        .task(id: translator.request) { await schedule() }
+        .translationTask(configuration) { session in
+            await translator.run(session)
+        }
+        .onAppear { focused = wantsKeyboard }
+        .onChange(of: wantsKeyboard) { _, wants in
+            if !wants { focused = false } else if !choosing { focused = true }
+        }
+        .onChange(of: choosing) { _, isChoosing in
+            if !isChoosing, wantsKeyboard { focused = true }
+        }
+    }
+
+    // MARK: - Columns
+
+    private var columns: some View {
         let font = fontSize(in: paneSize)
-        HStack(alignment: .top, spacing: 10) {
+        return HStack(alignment: .top, spacing: 10) {
             source(font)
             result(font)
         }
@@ -40,21 +76,15 @@ struct TranslatePane: View {
                     .onChange(of: proxy.size) { _, new in paneSize = new }
             }
         )
-        .padding(.top, 2)
-        // One task for both the text and the retry counter: a keystroke
-        // cancels the pending sleep, so only a pause actually translates.
-        .task(id: translator.request) { await schedule() }
-        .translationTask(configuration) { session in
-            await translator.run(session)
-        }
-        .onAppear { focused = wantsKeyboard }
-        .onChange(of: wantsKeyboard) { _, wants in focused = wants }
     }
 
     // MARK: - Left
 
     private func source(_ font: CGFloat) -> some View {
-        column(Translator.name(translator.route.source)) {
+        column(
+            Translator.name(translator.route.source),
+            pick: isForeign(translator.route.source) ? { choosing = true } : nil
+        ) {
             if !translator.input.isEmpty {
                 Button { translator.reset() } label: {
                     Image(systemName: "xmark")
@@ -102,7 +132,10 @@ struct TranslatePane: View {
     // MARK: - Right
 
     private func result(_ font: CGFloat) -> some View {
-        column(Translator.name(translator.route.target)) {
+        column(
+            Translator.name(translator.route.target),
+            pick: isForeign(translator.route.target) ? { choosing = true } : nil
+        ) {
             if !translator.output.isEmpty {
                 CopyButton { translator.copyOutput() }
             }
@@ -149,6 +182,75 @@ struct TranslatePane: View {
         }
     }
 
+    // MARK: - Language picker
+
+    private func isForeign(_ language: Locale.Language) -> Bool {
+        language != Translator.russian
+    }
+
+    private var languagePicker: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(localized("Language").uppercased())
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(Theme.tertiary)
+                Spacer(minLength: 4)
+                Button(localized("Done")) { closePicker() }
+                    .buttonStyle(.plain)
+                    .pointerStyle(.default)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white)
+            }
+            .frame(height: 14)
+
+            ForEach(TranslateLanguage.allCases) { language in
+                Button { choose(language) } label: {
+                    HStack(spacing: 8) {
+                        Text(language.code)
+                            .font(.system(size: 9, weight: .semibold).monospaced())
+                            .foregroundStyle(Theme.tertiary)
+                            .frame(width: 22, alignment: .leading)
+                        // The name in its own language: whoever is looking for
+                        // German should not have to find the English word for
+                        // it first.
+                        Text(language.nativeName)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if language == translator.language {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(language == translator.language ? Theme.surfaceHover : Theme.surface)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointerStyle(.default)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func choose(_ language: TranslateLanguage) {
+        translator.language = language
+        closePicker()
+    }
+
+    private func closePicker() {
+        guard choosing else { return }
+        choosing = false
+        if wantsKeyboard { focused = true }
+    }
+
     // MARK: - Type size
     //
     // A word should read like a headline and a paragraph has to fit, so the
@@ -187,15 +289,37 @@ struct TranslatePane: View {
 
     private func column<Accessory: View, Content: View>(
         _ title: String,
+        pick: (() -> Void)? = nil,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(title.uppercased())
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(Theme.tertiary)
+                if let pick {
+                    // The foreign column's heading is also the language
+                    // button. Which side it lands on follows the text: type
+                    // Cyrillic and the choice moves to the result column, so
+                    // the control is always next to the language it names.
+                    Button(action: pick) {
+                        HStack(spacing: 4) {
+                            Text(title.uppercased())
+                                .font(.system(size: 9, weight: .semibold))
+                                .tracking(0.8)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 7, weight: .bold))
+                        }
+                        .foregroundStyle(Theme.tertiary)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointerStyle(.default)
+                    .help(localized("Change language"))
+                } else {
+                    Text(title.uppercased())
+                        .font(.system(size: 9, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.tertiary)
+                }
                 Spacer(minLength: 4)
                 accessory()
             }
@@ -220,7 +344,7 @@ struct TranslatePane: View {
         try? await Task.sleep(for: .milliseconds(320))
         guard !Task.isCancelled else { return }
 
-        let route = Translator.route(for: text)
+        let route = translator.route
         if var current = configuration, current.source == route.source, current.target == route.target {
             // Same pair, different text. The modifier only re-runs when the
             // configuration changes, and invalidating is how one says "again".

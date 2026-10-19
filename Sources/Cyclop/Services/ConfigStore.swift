@@ -32,6 +32,7 @@ final class ConfigStore: ObservableObject {
         var teleprompter = Teleprompter()
         var hiddenTabs: [String] = []
         var fullSizeDrawnNotch = false
+        var translateLanguage = "en"
 
         init() {}
 
@@ -49,6 +50,7 @@ final class ConfigStore: ObservableObject {
             teleprompter = try c.decodeIfPresent(Teleprompter.self, forKey: .teleprompter) ?? d.teleprompter
             hiddenTabs = try c.decodeIfPresent([String].self, forKey: .hiddenTabs) ?? d.hiddenTabs
             fullSizeDrawnNotch = try c.decodeIfPresent(Bool.self, forKey: .fullSizeDrawnNotch) ?? d.fullSizeDrawnNotch
+            translateLanguage = try c.decodeIfPresent(String.self, forKey: .translateLanguage) ?? d.translateLanguage
         }
     }
 
@@ -130,6 +132,15 @@ final class ConfigStore: ObservableObject {
     var hiddenTabs: [String] {
         get { value.hiddenTabs }
         set { value.hiddenTabs = newValue; persist() }
+    }
+
+    /// The non-Russian half of the translate tab, by language code. Kept as a
+    /// string for the same reason as `hiddenTabs`: this store does not need to
+    /// know the tab's own enum. An unknown code falls back to English in
+    /// `Translator`, so a hand edit cannot leave the tab without a language.
+    var translateLanguage: String {
+        get { value.translateLanguage }
+        set { value.translateLanguage = newValue; persist() }
     }
 
     // MARK: - Migration
