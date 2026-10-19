@@ -155,6 +155,7 @@ struct TranslatePane: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
                     if translator.needsDownload {
+                        Button(localized("Download")) { download() }
                         Button("Translation Languages…") { Translator.openLanguageSettings() }
                     }
                     Button("Retry") { translator.retry() }
@@ -249,6 +250,21 @@ struct TranslatePane: View {
         guard choosing else { return }
         choosing = false
         if wantsKeyboard { focused = true }
+    }
+
+    // MARK: - Downloads
+
+    /// The pane cannot host the system's download sheet, so the request is
+    /// handed to a real window. `retry()` runs after the pack lands, which is
+    /// what turns "not installed" into the translation the user was waiting
+    /// for without them having to type the text again.
+    private func download() {
+        LanguagePackInstaller.shared.present(
+            source: translator.route.source,
+            target: translator.route.target
+        ) {
+            translator.retry()
+        }
     }
 
     // MARK: - Type size

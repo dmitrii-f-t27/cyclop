@@ -75,6 +75,12 @@
 "Change language" = "Сменить язык";
 "The %@ → %@ language pack is not installed." = "Не скачан языковой пакет %@ → %@.";
 "macOS does not translate this pair of languages." = "macOS не переводит эту пару языков.";
+"Download" = "Скачать";
+"Close" = "Закрыть";
+"Language Packs" = "Языковые пакеты";
+"Downloading %@ → %@" = "Скачивание %@ → %@";
+"Confirm the download in the system dialog." = "Подтверди загрузку в системном окне.";
+"macOS still reports the pack as not installed. Try the system settings." = "macOS всё ещё считает пакет неустановленным. Попробуй системные настройки.";
 
 /* Валюта */
 "Search currency" = "Поиск валюты";

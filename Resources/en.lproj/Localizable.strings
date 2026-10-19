@@ -76,6 +76,12 @@
 "Change language" = "Change language";
 "The %@ → %@ language pack is not installed." = "The %@ → %@ language pack is not installed.";
 "macOS does not translate this pair of languages." = "macOS does not translate this pair of languages.";
+"Download" = "Download";
+"Close" = "Close";
+"Language Packs" = "Language Packs";
+"Downloading %@ → %@" = "Downloading %@ → %@";
+"Confirm the download in the system dialog." = "Confirm the download in the system dialog.";
+"macOS still reports the pack as not installed. Try the system settings." = "macOS still reports the pack as not installed. Try the system settings.";
 
 /* Currency */
 "Search currency" = "Search currency";
